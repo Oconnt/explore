@@ -43,7 +43,7 @@ type Prowler struct {
 	constants            map[string]*GlobalConst
 	functions            map[string]*proc.Function
 	trie                 *trie.Trie
-	mu                   *sync.Mutex
+	mu                   sync.Mutex
 }
 
 type GlobalVar struct {
@@ -252,13 +252,12 @@ func (p *Prowler) Set(name string, value string) error {
 		return err
 	}
 
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.set(src, val)
 }
 
 func (p *Prowler) set(src *proc.Variable, val interface{}) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	switch src.Kind {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		fallthrough
@@ -319,6 +318,24 @@ func (p *Prowler) set(src *proc.Variable, val interface{}) error {
 
 		return nil
 	case reflect.Chan:
+		// If it is to modify chan, only modify the underlying buf
+		var bufVar *proc.Variable
+		children := src.Children
+		for _, child := range children {
+			if child.Name == "dataqsiz" && child.Value == cst.MakeUint64(0) {
+				return fmt.Errorf("cannot support synchronous channel modification")
+			}
+
+			if child.Name == "buf" {
+				bufVar = &child
+			}
+		}
+
+		if bufVar != nil {
+			return p.set(bufVar, val)
+		}
+
+		return fmt.Errorf("src variable not found buf: %+v\n", src)
 	case reflect.Map:
 		valMap := val.(map[interface{}]interface{})
 		cVars := src.Children
@@ -414,6 +431,50 @@ func (p *Prowler) set(src *proc.Variable, val interface{}) error {
 		src.Base = ptr
 		src.Len = int64(len(valSli))
 		src.Cap = int64(cap(valSli))
+	case reflect.Array:
+		valSli := val.([]interface{})
+		addr := src.Addr
+		buf := new(bytes.Buffer)
+		for i, v := range valSli {
+			elem := reflect.ValueOf(v)
+			typ := elem.Type()
+
+			switch typ.Kind() {
+			case reflect.String:
+				elemLen := elem.Len()
+				elemStr := elem.String()
+				dataPtr, err := findFreeMemory(p.pid, uint64(elemLen))
+				if err != nil {
+					return err
+				}
+
+				// 将值写入空闲内存
+				if _, err = p.WriteMemory(dataPtr, []byte(elemStr)); err != nil {
+					return err
+				}
+
+				sliCurAddr := addr + uint64(uintptr(i)*elem.Type().Size())
+				err = p.writeString(sliCurAddr, uint64(elemLen), dataPtr)
+				if err != nil {
+					return err
+				}
+			default:
+				if err := binary.Write(buf, binary.LittleEndian, elem.Interface()); err != nil {
+					return fmt.Errorf("serialize error at index %d: %v", i, err)
+				}
+
+			}
+
+		}
+
+		if buf.Len() != 0 {
+			// 将值写入空闲内存
+			if _, err := p.WriteMemory(addr, buf.Bytes()); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 
 	dst := proc.NewVariable(src.Name, src.Addr, src.DwarfType, p.bi, p)
@@ -542,6 +603,26 @@ func (p *Prowler) Expression(expr string, realType godwarf.Type) (interface{}, e
 		}
 
 		return res, nil
+	case *godwarf.ChanType:
+		if strings.HasPrefix(expr, "[") && strings.HasSuffix(expr, "]") {
+			var chBuf []interface{}
+			chanType := realType.(*godwarf.ChanType)
+			elemType := chanType.ElemType
+			expr = expr[1 : len(expr)-1]
+			elems := strings.Split(expr, ",")
+
+			for _, rawElem := range elems {
+				elem, err := p.Expression(strings.TrimSpace(rawElem), elemType)
+				if err != nil {
+					return nil, err
+				}
+				chBuf = append(chBuf, elem)
+			}
+
+			return chBuf, nil
+		}
+
+		return nil, fmt.Errorf("cannot parse expression %q, chan must be wrapped by []", expr)
 	case *godwarf.MapType:
 		var mp map[string]interface{}
 		if err := json.Unmarshal([]byte(expr), &mp); err != nil {
@@ -580,7 +661,7 @@ func (p *Prowler) Expression(expr string, realType godwarf.Type) (interface{}, e
 		}
 
 		return res, nil
-	case *godwarf.SliceType, *godwarf.ArrayType:
+	case *godwarf.SliceType:
 		if strings.HasPrefix(expr, "[") && strings.HasSuffix(expr, "]") {
 			var items []interface{}
 			elemType := realType.(*godwarf.SliceType).ElemType
@@ -591,7 +672,7 @@ func (p *Prowler) Expression(expr string, realType godwarf.Type) (interface{}, e
 
 			elems := strings.Split(expr, ",")
 			for _, elem := range elems {
-				exp, err := p.Expression(elem, elemType)
+				exp, err := p.Expression(strings.TrimSpace(elem), elemType)
 				if err != nil {
 					return nil, fmt.Errorf("element format error, elem: %s, type: %v", elem, elemType)
 				}
@@ -601,7 +682,35 @@ func (p *Prowler) Expression(expr string, realType godwarf.Type) (interface{}, e
 			return items, nil
 		}
 
-		return nil, fmt.Errorf("cannot parse expression %q, sli or arr must be wrapped by []", expr)
+		return nil, fmt.Errorf("cannot parse expression %q, sli must be wrapped by []", expr)
+	case *godwarf.ArrayType:
+		if strings.HasPrefix(expr, "[") && strings.HasSuffix(expr, "]") {
+			var items []interface{}
+			arrType := realType.(*godwarf.ArrayType)
+			count := arrType.Count
+			elemType := arrType.Type
+			expr = expr[1 : len(expr)-1]
+			if len(expr) == 0 {
+				return items, nil
+			}
+
+			elems := strings.Split(expr, ",")
+			if len(elems) > int(count) {
+				return nil, fmt.Errorf("expected length is %d, actual length is %d, array length is not expandable, write failed", count, len(elems))
+			}
+
+			for _, elem := range elems {
+				exp, err := p.Expression(strings.TrimSpace(elem), elemType)
+				if err != nil {
+					return nil, fmt.Errorf("element format error, elem: %s, type: %v", elem, elemType)
+				}
+				items = append(items, exp)
+			}
+
+			return items, nil
+		}
+
+		return nil, fmt.Errorf("cannot parse expression %q, arr must be wrapped by []", expr)
 	default:
 		return nil, fmt.Errorf("conversion not implemented for type: %s", realType.String())
 	}
@@ -655,6 +764,8 @@ func (p *Prowler) ToVar(name string, addr uint64) (*proc.Variable, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("v: %+v\n", v)
 
 	return v, nil
 }
