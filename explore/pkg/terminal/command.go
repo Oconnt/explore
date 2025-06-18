@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	argumentsErr = fmt.Errorf("wrong number of arguments")
-	//argumentsFormatErr = fmt.Errorf("please enter command arguments")
+	argumentsErr = "invalid number of arguments, expected %d, actual %d"
 )
 
 type cmdPrefix int
@@ -23,7 +22,7 @@ const (
 	revPrefix
 )
 
-type cmdFn func(term *Term, args []string) error
+type cmdFn func(term *Term, args string) error
 
 type command struct {
 	aliases         []string
@@ -107,15 +106,11 @@ func (c *Commands) Find(cmdstr string, prefix cmdPrefix) command {
 
 func (c *Commands) Call(cmdStr string, t *Term) error {
 	cmd, argStr, _ := strings.Cut(cmdStr, " ")
-	//if cmd != "help" && !found {
-	//	return argumentsFormatErr
-	//}
 
-	args := strings.Split(argStr, " ")
-	return c.Find(cmd, noPrefix).fn(t, args)
+	return c.Find(cmd, noPrefix).fn(t, argStr)
 }
 
-func (c *Commands) help(t *Term, args []string) error {
+func (c *Commands) help(t *Term, args string) error {
 	fmt.Fprintln(t.stdout, "The following commands are available:")
 	w := new(tabwriter.Writer)
 	w.Init(t.stdout, 0, 8, 0, '-', 0)
@@ -139,12 +134,8 @@ func (c *Commands) help(t *Term, args []string) error {
 	return nil
 }
 
-func get(t *Term, args []string) error {
-	if len(args) != 1 {
-		return argumentsErr
-	}
-
-	v, err := t.client.SendExpr(service.Get, args...)
+func get(t *Term, args string) error {
+	v, err := t.client.SendExpr(service.Get, args)
 	if err != nil {
 		t.RedirectTo(os.Stderr)
 		fmt.Fprintln(t.stdout, err.Error())
@@ -155,12 +146,8 @@ func get(t *Term, args []string) error {
 	return err
 }
 
-func set(t *Term, args []string) error {
-	if len(args) != 2 {
-		return argumentsErr
-	}
-
-	v, err := t.client.SendExpr(service.Set, args...)
+func set(t *Term, args string) error {
+	v, err := t.client.SendExpr(service.Set, args)
 	if err != nil {
 		t.RedirectTo(os.Stderr)
 		fmt.Fprintln(t.stdout, err.Error())
@@ -171,12 +158,8 @@ func set(t *Term, args []string) error {
 	return err
 }
 
-func list(t *Term, args []string) error {
-	if len(args) != 1 {
-		return argumentsErr
-	}
-
-	vs, err := t.client.SendExpr(service.List, args...)
+func list(t *Term, args string) error {
+	vs, err := t.client.SendExpr(service.List, args)
 	if err != nil {
 		t.RedirectTo(os.Stderr)
 		fmt.Fprintln(t.stdout, err.Error())
@@ -193,16 +176,16 @@ func (ere ExitRequestError) Error() string {
 	return ""
 }
 
-func exit(t *Term, args []string) error {
+func exit(t *Term, args string) error {
 	return ExitRequestError{}
 }
 
 var errNoCmd = errors.New("command not available")
 
-func noCmdAvailable(t *Term, args []string) error {
+func noCmdAvailable(t *Term, args string) error {
 	return errNoCmd
 }
 
-func nullCommand(t *Term, args []string) error {
+func nullCommand(t *Term, args string) error {
 	return nil
 }

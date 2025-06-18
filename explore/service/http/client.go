@@ -30,21 +30,21 @@ func NewClient(addr string) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) SendExpr(cmdType service.CmdType, args ...string) (string, error) {
+func (c *Client) SendExpr(cmdType service.CmdType, args string) (string, error) {
 	var method, path, expr string
 	switch cmdType {
 	case service.Set:
-		expr = setExpr(args...)
+		expr = setExpr(args)
 		method = http.MethodPost
 		path = "/set"
 	case service.List:
-		expr = listExpr(args...)
+		expr = listExpr(args)
 		method = http.MethodGet
 		path = "/list"
 	case service.Get:
 		fallthrough
 	default:
-		expr = getExpr(args...)
+		expr = getExpr(args)
 		method = http.MethodGet
 		path = "/get"
 	}
@@ -82,28 +82,16 @@ func (c *Client) IsExploreServer() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func getExpr(args ...string) string {
-	if len(args) < 1 {
-		return ""
-	}
-
-	return fmt.Sprintf("get %s", args[0])
+func getExpr(args string) string {
+	return fmt.Sprintf("get %s", args)
 }
 
-func setExpr(args ...string) string {
-	if len(args) < 2 {
-		return ""
-	}
-
-	return fmt.Sprintf("set %s %s", args[0], args[1])
+func setExpr(args string) string {
+	return fmt.Sprintf("set %s", args)
 }
 
-func listExpr(args ...string) string {
-	if len(args) < 1 {
-		return ""
-	}
-
-	return fmt.Sprintf("list %s", args[0])
+func listExpr(args string) string {
+	return fmt.Sprintf("list %s", args)
 }
 
 type doRequest struct {

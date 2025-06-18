@@ -506,7 +506,7 @@ func (p *Prowler) writePointer(addr, val uint64) error {
 }
 
 func (p *Prowler) ListFuzzy(expr string) []string {
-	return p.trie.FuzzySearch(expr)
+	return p.trie.PrefixSearch(expr)
 }
 
 func (p *Prowler) List(t LsType, prefixes, suffixes []string) []string {
@@ -764,8 +764,6 @@ func (p *Prowler) ToVar(name string, addr uint64) (*proc.Variable, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Printf("v: %+v\n", v)
 
 	return v, nil
 }
