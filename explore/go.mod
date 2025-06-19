@@ -6,7 +6,7 @@ toolchain go1.23.9
 
 require (
 	github.com/derekparker/trie v0.0.0-20230829180723-39f4de51ef7d
-	github.com/go-delve/delve v1.24.2
+	//github.com/go-delve/delve v1.24.2
 	github.com/go-delve/liner v1.2.3-0.20231231155935-4726ab1d7f62
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/mattn/go-colorable v0.1.13
@@ -32,4 +32,4 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 )
 
-replace github.com/go-delve/delve v1.24.2 => ../delve
+//replace github.com/go-delve/delve v1.24.2 => ../delve

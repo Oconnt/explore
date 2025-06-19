@@ -1,11 +1,11 @@
 package utils
 
 import (
+	"explore/pkg/proc/desc"
 	"fmt"
-	"github.com/go-delve/delve/service/api"
 )
 
-func PrintVariable(v *api.Variable) {
+func PrintVariable(v *desc.Variable) {
 	if v == nil {
 		return
 	}

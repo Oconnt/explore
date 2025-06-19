@@ -13,7 +13,7 @@ func NewRPCServer(prowler *prowler.Prowler) *RPCServer {
 }
 
 func (r *RPCServer) Run() error {
-
+	return nil
 }
 
 func (r *RPCServer) Get(name string) {

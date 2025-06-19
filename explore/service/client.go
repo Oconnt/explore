@@ -9,6 +9,6 @@ const (
 )
 
 type Client interface {
-	SendExpr(exprType CmdType, args ...string) (string, error)
+	SendExpr(exprType CmdType, args string) (string, error)
 	IsExploreServer() bool
 }

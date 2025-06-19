@@ -2,7 +2,7 @@ package terminal
 
 import (
 	"bufio"
-	"github.com/go-delve/delve/pkg/terminal/colorize"
+	"explore/pkg/terminal/colorize"
 	"github.com/mattn/go-isatty"
 	"io"
 	"os"

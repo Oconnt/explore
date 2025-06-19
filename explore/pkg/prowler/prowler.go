@@ -6,14 +6,14 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	e "explore/error"
+	"explore/pkg/dwarf/godwarf"
+	"explore/pkg/proc"
+	"explore/pkg/proc/desc"
 	"explore/utils"
 	"fmt"
 	"github.com/derekparker/trie"
-	"github.com/go-delve/delve/pkg/dwarf/godwarf"
-	"github.com/go-delve/delve/pkg/proc"
-	"github.com/go-delve/delve/pkg/proc/linutil"
-	"github.com/go-delve/delve/service/api"
 	cst "go/constant"
+	"io"
 	"math"
 	"os"
 	"reflect"
@@ -144,7 +144,7 @@ func NewProwler(pid int) (*Prowler, error) {
 	return p, nil
 }
 
-func (p *Prowler) Get(name string) (*api.Variable, error) {
+func (p *Prowler) Get(name string) (*desc.Variable, error) {
 	node, found := p.trie.Find(name)
 	if !found {
 		return nil, fmt.Errorf("%s not found in process", name)
@@ -781,15 +781,15 @@ func (p *Prowler) EntryPoint() (uint64, error) {
 		return 0, fmt.Errorf("could not read auxiliary vector: %v", err)
 	}
 
-	return linutil.EntryPointFromAuxv(auxvbuf, p.bi.Arch.PtrSize()), nil
+	return EntryPointFromAuxv(auxvbuf, p.bi.Arch.PtrSize()), nil
 }
 
-func (p *Prowler) ToPrintVar(v *proc.Variable) *api.Variable {
+func (p *Prowler) ToPrintVar(v *proc.Variable) *desc.Variable {
 	if v == nil {
 		return nil
 	}
 
-	vv := &api.Variable{
+	vv := &desc.Variable{
 		Name:     v.Name,
 		Addr:     v.Addr,
 		OnlyAddr: v.OnlyAddr,
@@ -797,7 +797,7 @@ func (p *Prowler) ToPrintVar(v *proc.Variable) *api.Variable {
 		Kind:     v.Kind,
 		Len:      v.Len,
 		Cap:      v.Cap,
-		Flags:    api.VariableFlags(v.Flags),
+		Flags:    desc.VariableFlags(v.Flags),
 		DeclLine: v.DeclLine,
 	}
 
@@ -857,4 +857,50 @@ func (p *Prowler) disassemble(fn *proc.Function) ([]proc.AsmInstruction, error) 
 	}
 
 	return r, nil
+}
+
+const (
+	_AT_NULL  = 0
+	_AT_ENTRY = 9
+)
+
+func EntryPointFromAuxv(auxv []byte, ptrSize int) uint64 {
+	rd := bytes.NewBuffer(auxv)
+
+	for {
+		tag, err := readUintRaw(rd, binary.LittleEndian, ptrSize)
+		if err != nil {
+			return 0
+		}
+		val, err := readUintRaw(rd, binary.LittleEndian, ptrSize)
+		if err != nil {
+			return 0
+		}
+
+		switch tag {
+		case _AT_NULL:
+			return 0
+		case _AT_ENTRY:
+			return val
+		}
+	}
+}
+
+// readUintRaw reads an integer of ptrSize bytes, with the specified byte order, from reader.
+func readUintRaw(reader io.Reader, order binary.ByteOrder, ptrSize int) (uint64, error) {
+	switch ptrSize {
+	case 4:
+		var n uint32
+		if err := binary.Read(reader, order, &n); err != nil {
+			return 0, err
+		}
+		return uint64(n), nil
+	case 8:
+		var n uint64
+		if err := binary.Read(reader, order, &n); err != nil {
+			return 0, err
+		}
+		return n, nil
+	}
+	return 0, fmt.Errorf("not supported ptr size %d", ptrSize)
 }
