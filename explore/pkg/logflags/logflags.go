@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"explore/utils"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
 	"net"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,11 +20,16 @@ import (
 	"golang.org/x/telemetry/counter"
 )
 
+var (
+	DefaultLogDesc = defaultPath()
+)
+
 var any = false
 var debugger = false
 var gdbWire = false
 var lldbServerOutput = false
 var debugLineErrors = false
+var http = false
 var rpc = false
 var dap = false
 var fnCall = false
@@ -32,6 +39,11 @@ var stack = false
 var logOut io.WriteCloser
 
 var Bug = counter.NewStack("delve/bug", 16)
+
+func defaultPath() string {
+	home := utils.GetUserHomeDir()
+	return path.Join(home, ".explore", "explore.log")
+}
 
 func makeLogger(flag bool, attrs ...interface{}) Logger {
 	if lf := loggerFactory; lf != nil {
@@ -182,10 +194,6 @@ func WriteError(msg string) {
 	}
 }
 
-func WriteCgoFlagsWarning() {
-	makeLogger(true, "layer", "dlv").Warn("CGO_CFLAGS already set, Cgo code could be optimized.")
-}
-
 var errLogstrWithoutLog = errors.New("--log-output specified without --log")
 
 // Setup sets debugger flags based on the contents of logstr.
@@ -239,6 +247,8 @@ func Setup(logFlag bool, logstr, logDest string) error {
 			minidump = true
 		case "stack":
 			stack = true
+		case "http":
+			http = true
 		default:
 			fmt.Fprintf(os.Stderr, "Warning: unknown log output value %q, run 'dlv help log' for usage.\n", logcmd)
 		}

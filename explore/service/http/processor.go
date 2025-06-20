@@ -9,13 +9,6 @@ import (
 	"strings"
 )
 
-type Context struct {
-	expr   *Expression
-	method string
-	path   string
-	w      http.ResponseWriter
-}
-
 type Router struct {
 	method string
 	path   string
@@ -39,9 +32,10 @@ func (p *processor) route(method, path string) func(ctx *Context) {
 }
 
 func (p *processor) worker(ctx *Context) {
-	fn := p.route(ctx.method, ctx.path)
+	req := ctx.request
+	fn := p.route(req.method, req.path)
 	if fn == nil {
-		http.Error(ctx.w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		ctx.respFailed(http.StatusNotFound, http.StatusText(http.StatusNotFound))
 		return
 	}
 
@@ -63,7 +57,7 @@ func register(p *processor) {
 			method: http.MethodGet,
 			path:   "/explore",
 			fn: func(ctx *Context) {
-				ctx.w.WriteHeader(http.StatusOK)
+				ctx.respSuccess(nil)
 			},
 		},
 		{
@@ -74,24 +68,24 @@ func register(p *processor) {
 				cmd, args := expr.resolve()
 				cmdStr := strings.ToLower(cmd)
 				if cmdStr != "get" {
-					http.Error(ctx.w, "invalid command", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid command: %s", cmdStr))
 					return
 				}
 
 				if len(args) < 1 {
-					http.Error(ctx.w, "empty arguments", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid number of arguments: %d", len(args)))
 					return
 				}
 
 				name := args[0]
 				res, err := p.prowler.Get(name)
 				if err != nil {
-					http.Error(ctx.w, err.Error(), http.StatusInternalServerError)
+					ctx.respFailed(http.StatusInternalServerError, err.Error())
 					return
 				}
 
 				// ctx.w.WriteHeader(http.StatusOK)
-				ctx.w.Write([]byte(res.MultilineString("", "")))
+				ctx.respSuccess(res.MultilineString("", ""))
 			},
 		},
 		{
@@ -102,30 +96,30 @@ func register(p *processor) {
 				cmd, args := expr.resolve()
 				cmdStr := strings.ToLower(cmd)
 				if cmdStr != "set" {
-					http.Error(ctx.w, "invalid command", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid command: %s", cmdStr))
 					return
 				}
 
 				if len(args) < 2 {
-					http.Error(ctx.w, "empty arguments", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid number of arguments: %d", len(args)))
 					return
 				}
 
 				name, val := args[0], args[1]
 				err := p.prowler.Set(name, val)
 				if err != nil {
-					http.Error(ctx.w, err.Error(), http.StatusInternalServerError)
+					ctx.respFailed(http.StatusInternalServerError, err.Error())
 					return
 				}
 
 				res, err := p.prowler.Get(name)
 				if err != nil {
-					http.Error(ctx.w, err.Error(), http.StatusInternalServerError)
+					ctx.respFailed(http.StatusInternalServerError, err.Error())
 					return
 				}
 
 				//ctx.w.WriteHeader(http.StatusOK)
-				ctx.w.Write([]byte(res.MultilineString("", "")))
+				ctx.respSuccess(res.MultilineString("", ""))
 			},
 		},
 		{
@@ -136,12 +130,12 @@ func register(p *processor) {
 				cmd, args := expr.resolve()
 				cmdStr := strings.ToLower(cmd)
 				if cmdStr != "list" {
-					http.Error(ctx.w, "invalid command", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid command: %s", cmdStr))
 					return
 				}
 
 				if len(args) < 1 {
-					http.Error(ctx.w, "empty arguments", http.StatusBadRequest)
+					ctx.respFailed(http.StatusBadRequest, fmt.Sprintf("invalid number of arguments: %d", len(args)))
 					return
 				}
 
@@ -154,7 +148,7 @@ func register(p *processor) {
 				}
 
 				//ctx.w.WriteHeader(http.StatusOK)
-				ctx.w.Write([]byte(buf.String()))
+				ctx.respSuccess(buf.String())
 			},
 		},
 	}

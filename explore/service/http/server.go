@@ -2,10 +2,9 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"explore/pkg/prowler"
 	"explore/service"
-	"io"
+	"github.com/urfave/cli"
 	"net"
 	"net/http"
 	"os"
@@ -16,14 +15,18 @@ type Server struct {
 	service.ServerImpl
 	httpServer *http.Server
 	pool       sync.Pool
+	chain      HandlerChain
 }
 
-func NewServer(listener net.Listener, p *prowler.Prowler) *Server {
+func NewServer(ctx *cli.Context, listener net.Listener, p *prowler.Prowler) *Server {
+	impl := service.ServerImpl{
+		Listener: listener,
+		StopChan: make(chan struct{}),
+	}
+	impl.SetupLogger(ctx.Bool("logFlag"), ctx.String("logStr"), ctx.String("logDesc"))
+
 	s := &Server{
-		ServerImpl: service.ServerImpl{
-			Listener: listener,
-			StopChan: make(chan struct{}),
-		},
+		ServerImpl: impl,
 		pool: sync.Pool{
 			New: func() interface{} {
 				proc, _ := newProcessor(p)
@@ -54,26 +57,42 @@ func (s *Server) Stop() error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	bs, err := io.ReadAll(r.Body)
-	r.Body.Close()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	exr := new(Expression)
-	if err = json.Unmarshal(bs, exr); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	ctx := &Context{
-		expr:   exr,
-		method: r.Method,
-		path:   r.URL.Path,
-		w:      w,
-	}
-
+	//s.printRequestInfo(r)
+	//
+	//bs, err := io.ReadAll(r.Body)
+	//r.Body.Close()
+	//if err != nil {
+	//	http.Error(w, err.Error(), http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//exr := new(Expression)
+	//if err = json.Unmarshal(bs, exr); err != nil {
+	//	http.Error(w, err.Error(), http.StatusBadRequest)
+	//	return
+	//}
+	//
+	//ctx := &Context{
+	//	expr:   exr,
+	//	method: r.Method,
+	//	path:   r.URL.Path,
+	//	w:      w,
+	//}
+	//
+	ctx := newContext(s.Logger, w, r)
 	p := s.pool.Get().(*processor)
-	p.worker(ctx)
+	ctx.chain = httpHandlerChain(p.worker)
+	ctx.chain.exec(ctx)
 }
+
+//func (s *Server) printRequestInfo(r *http.Request) {
+//	if s.ServerImpl.Logger != nil {
+//		s.ServerImpl.Logger.Infof("client ip: %s", r.RemoteAddr)
+//		s.ServerImpl.Logger.Infof("url: %+v", r.URL)
+//		s.ServerImpl.Logger.Infof("method: %s", r.Method)
+//		s.ServerImpl.Logger.Infof("headers: %+v", r.Header)
+//
+//		//bs, _ := io.ReadAll(r.Body)
+//		//s.ServerImpl.Logger.Infof("body: %s", string(bs))
+//	}
+//}

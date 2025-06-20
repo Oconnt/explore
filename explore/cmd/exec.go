@@ -111,13 +111,13 @@ func (e *executor) attach() error {
 	srv := ctx.String("srv")
 	switch srv {
 	case "http":
-		server = http.NewServer(listener, e.prowler)
+		fallthrough
 	default:
-		server = http.NewServer(listener, e.prowler)
+		server = http.NewServer(ctx, listener, e.prowler)
 	}
 
 	defer server.Stop()
-	if err := server.Run(); err != nil {
+	if err = server.Run(); err != nil {
 		return err
 	}
 

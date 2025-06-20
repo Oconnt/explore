@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/urfave/cli"
 	"os"
+	"os/user"
 	"strings"
 )
 
@@ -67,4 +68,13 @@ func MD5(s string) string {
 	hasher.Write([]byte(s))
 	hashSlice := hasher.Sum(nil)
 	return hex.EncodeToString(hashSlice)
+}
+
+func GetUserHomeDir() string {
+	userHomeDir := "."
+	usr, err := user.Current()
+	if err == nil {
+		userHomeDir = usr.HomeDir
+	}
+	return userHomeDir
 }

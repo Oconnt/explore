@@ -13,10 +13,6 @@ type Server struct {
 	grpcServer *grpc.Server
 }
 
-//func (s *Server) Term() {
-//
-//}
-
 func NewServer(addr string, pid int) *Server {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -32,7 +28,6 @@ func NewServer(addr string, pid int) *Server {
 		ServerImpl: service.ServerImpl{
 			Listener: lis,
 			StopChan: make(chan struct{}),
-			Prowler:  p,
 		},
 		grpcServer: grpc.NewServer(),
 	}

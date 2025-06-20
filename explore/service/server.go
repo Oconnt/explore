@@ -1,6 +1,7 @@
 package service
 
 import (
+	"explore/pkg/logflags"
 	"net"
 )
 
@@ -12,8 +13,25 @@ type Server interface {
 }
 
 type ServerImpl struct {
+	Logger   logflags.Logger
 	Listener net.Listener
 	StopChan chan struct{}
+}
+
+func (si *ServerImpl) SetupLogger(flag bool, logStr, logDest string) error {
+	err := logflags.Setup(flag, logStr, logDest)
+	if err != nil {
+		return err
+	}
+
+	switch logStr {
+	case "http":
+		fallthrough
+	default:
+		si.Logger = logflags.HTTPLogger()
+	}
+
+	return nil
 }
 
 //func (s *ServerImpl) Stop() error {

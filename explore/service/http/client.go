@@ -58,12 +58,12 @@ func (c *Client) SendExpr(cmdType service.CmdType, args string) (string, error) 
 		return "", err
 	}
 
-	bs, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	respStr, ok := resp.Data.(string)
+	if !ok {
+		return "", fmt.Errorf("unexpected response type %T", resp.Data)
 	}
 
-	return string(bs), nil
+	return respStr, nil
 }
 
 func (c *Client) IsExploreServer() bool {
@@ -76,10 +76,11 @@ func (c *Client) IsExploreServer() bool {
 		path:   "/explore",
 	})
 	if err != nil {
+		fmt.Println("client recv err: ", err)
 		return false
 	}
 
-	return resp.StatusCode == http.StatusOK
+	return resp.Status == http.StatusOK
 }
 
 func getExpr(args string) string {
@@ -108,27 +109,38 @@ func (c *Client) jsonHeader() http.Header {
 	return header
 }
 
-func (c *Client) do(req *doRequest) (resp *http.Response, err error) {
+func (c *Client) do(req *doRequest) (resp *response, err error) {
 	url := c.url + req.path
 
 	exr := newExpression(req.expr, os.Getpid())
 	bs, err := json.Marshal(exr)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	bodyReader := bytes.NewReader(bs)
-	request, err := http.NewRequest(req.method, url, bodyReader)
+	r, err := http.NewRequest(req.method, url, bodyReader)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	if req.header == nil {
-		request.Header = c.jsonHeader()
+		r.Header = c.jsonHeader()
 	} else {
-		request.Header = req.header
+		r.Header = req.header
 	}
 
 	http.DefaultClient.Timeout = c.timeout
-	return http.DefaultClient.Do(request)
+	res, err := http.DefaultClient.Do(r)
+	if err != nil {
+		return
+	}
+
+	bs, err = io.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(bs, &resp)
+	return
 }
