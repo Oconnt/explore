@@ -203,12 +203,13 @@ func Setup(logFlag bool, logstr, logDest string) error {
 	if logDest != "" {
 		n, err := strconv.Atoi(logDest)
 		if err == nil {
-			logOut = os.NewFile(uintptr(n), "delve-logs")
+			logOut = os.NewFile(uintptr(n), "explore-logs")
 		} else {
-			fh, err := os.Create(logDest)
+			fh, err := os.OpenFile(logDest, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
 			if err != nil {
-				return fmt.Errorf("could not create log file: %v", err)
+				return fmt.Errorf("failed to open/create log file: %v", err)
 			}
+
 			logOut = fh
 		}
 	}

@@ -80,6 +80,9 @@ func printResponse(ctx *Context) {
 	res := ctx.response
 	if logger != nil && res != nil {
 		logger.Info("=========== response info ===========")
+		if ctx.request != nil {
+			logger.Infof("id: %s", ctx.request.requestID)
+		}
 		logger.Infof("status: %d", res.Status)
 		logger.Infof("msg: %s", res.Msg)
 		logger.Infof("data: %+v", res.Data)

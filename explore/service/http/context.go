@@ -34,13 +34,13 @@ func (c *Context) respFailed(code int, message string) {
 }
 
 func (c *Context) resp(status int, msg string, data interface{}) {
-	resp := &response{
+	c.response = &response{
 		Status: status,
 		Msg:    msg,
 		Data:   data,
 	}
 
-	bs, err := json.Marshal(resp)
+	bs, err := json.Marshal(c.response)
 	if err != nil {
 		c.write.WriteHeader(http.StatusInternalServerError)
 		c.write.Write([]byte(err.Error()))
